@@ -684,16 +684,34 @@ ConVar::~ConVar( void )
 //-----------------------------------------------------------------------------
 // Install a change callback (there shouldn't already be one....)
 //-----------------------------------------------------------------------------
-void ConVar::InstallChangeCallback( FnChangeCallback_t callback )
+void ConVar::InstallChangeCallback( FnChangeCallback_t callback, bool invoke )
 {
-	Assert( !m_pParent->m_fnChangeCallback || !callback );
-	m_pParent->m_fnChangeCallback = callback;
-
-	if ( m_pParent->m_fnChangeCallback )
+	if ( !callback )
 	{
-		// Call it immediately to set the initial value...
-		m_pParent->m_fnChangeCallback( this, m_pszString, m_fValue );
+		Warning("InstallChangeCallback called with NULL callback, ignoring!!!\n");
 	}
+  
+	if ( m_pParent->m_callbacks.Count() > 0 )
+	{
+		for (int i=0; i <= m_pParent->m_callbacks.Count(); ++i)
+		{
+			if (m_pParent->m_callbacks[i] == callback)
+			{
+				Warning("InstallChangeCallback ignoring duplicate change callback!!!\n");
+				return;
+			}
+		}
+	}
+
+	m_callbacks.AddToTail(callback);
+    
+	if ( invoke )
+		callback(m_pParent, m_pszString, m_fValue);
+}
+
+void ConVar::RemoveChangeCallback(FnChangeCallback_t callback)
+{
+	m_callbacks.FindAndRemove(callback);
 }
 
 bool ConVar::IsFlagSet( int flag ) const
@@ -749,6 +767,7 @@ void ConVar::Init()
 //-----------------------------------------------------------------------------
 void ConVar::InternalSetValue( const char *value )
 {
+	// TODO: Redo this function
 	if ( IsFlagSet( FCVAR_MATERIAL_THREAD_MASK ) )
 	{
 		if ( g_pCVar && !g_pCVar->IsMaterialThreadSetAllowed() )
@@ -764,7 +783,7 @@ void ConVar::InternalSetValue( const char *value )
 
 	Assert(m_pParent == this); // Only valid for root convars.
 
-	float flOldValue = m_fValue;
+	//float flOldValue = m_fValue;
 
 	val = (char *)value;
 	if ( !value )
@@ -784,7 +803,8 @@ void ConVar::InternalSetValue( const char *value )
 
 	if ( !( m_nFlags & FCVAR_NEVER_AS_STRING ) )
 	{
-		ChangeStringValue( val, flOldValue );
+		//ChangeStringValue( val, flOldValue );
+		ChangeStringValue( val, CVValue_t() );
 	}
 }
 
@@ -792,7 +812,7 @@ void ConVar::InternalSetValue( const char *value )
 // Purpose: 
 // Input  : *tempVal - 
 //-----------------------------------------------------------------------------
-void ConVar::ChangeStringValue( const char *tempVal, float flOldValue )
+void ConVar::ChangeStringValue(const char *tempVal, ConVar::CVValue_t const& oldValue)
 {
 	Assert( !( m_nFlags & FCVAR_NEVER_AS_STRING ) );
 
@@ -821,13 +841,16 @@ void ConVar::ChangeStringValue( const char *tempVal, float flOldValue )
 		*m_pszString = 0;
 	}
 
-	// Invoke any necessary callback function
-	if ( m_fnChangeCallback )
+	if (Q_strcmp(pszOldValue, m_pszString))
 	{
-		m_fnChangeCallback( this, pszOldValue, flOldValue );
-	}
+		for (int i=0; i < m_callbacks.Count(); ++i)
+		{
+			m_callbacks[i](m_pParent, pszOldValue, oldValue.m_fValue);
+		}
 
-	g_pCVar->CallGlobalChangeCallbacks( this, pszOldValue, flOldValue );
+		if (g_pCVar)
+			g_pCVar->CallGlobalChangeCallbacks(this, pszOldValue, oldValue.m_fValue);
+	}
 
 	stackfree( pszOldValue );
 }
@@ -860,6 +883,7 @@ bool ConVar::ClampValue( float& value )
 //-----------------------------------------------------------------------------
 void ConVar::InternalSetFloatValue( float fNewValue )
 {
+	// TODO: Redo this function
 	if ( fNewValue == m_fValue )
 		return;
 
@@ -878,7 +902,7 @@ void ConVar::InternalSetFloatValue( float fNewValue )
 	ClampValue( fNewValue );
 
 	// Redetermine value
-	float flOldValue = m_fValue;
+	//float flOldValue = m_fValue;
 	m_fValue		= fNewValue;
 	m_nValue		= ( int )m_fValue;
 
@@ -886,7 +910,8 @@ void ConVar::InternalSetFloatValue( float fNewValue )
 	{
 		char tempVal[ 32 ];
 		Q_snprintf( tempVal, sizeof( tempVal), "%f", m_fValue );
-		ChangeStringValue( tempVal, flOldValue );
+		//ChangeStringValue( tempVal, flOldValue );
+		ChangeStringValue( tempVal, CVValue_t() );
 	}
 	else
 	{
@@ -900,6 +925,7 @@ void ConVar::InternalSetFloatValue( float fNewValue )
 //-----------------------------------------------------------------------------
 void ConVar::InternalSetIntValue( int nValue )
 {
+	// TODO: Redo this function
 	if ( nValue == m_nValue )
 		return;
 
@@ -921,7 +947,7 @@ void ConVar::InternalSetIntValue( int nValue )
 	}
 
 	// Redetermine value
-	float flOldValue = m_fValue;
+	//float flOldValue = m_fValue;
 	m_fValue		= fValue;
 	m_nValue		= nValue;
 
@@ -929,12 +955,24 @@ void ConVar::InternalSetIntValue( int nValue )
 	{
 		char tempVal[ 32 ];
 		Q_snprintf( tempVal, sizeof( tempVal ), "%d", m_nValue );
-		ChangeStringValue( tempVal, flOldValue );
+		//ChangeStringValue( tempVal, flOldValue );
+		ChangeStringValue( tempVal, CVValue_t() );
 	}
 	else
 	{
 		Assert( !m_fnChangeCallback );
 	}
+}
+
+void ConVar::InternalSetVectorValue(Vector const& value)
+{
+	// TODO
+}
+
+bool InternalSetVectorFromString(char const* value)
+{
+	// TODO
+	return false;
 }
 
 //-----------------------------------------------------------------------------
@@ -958,7 +996,8 @@ void ConVar::Create( const char *pName, const char *pDefaultValue, int flags /*=
 	m_bHasMax = bMax;
 	m_fMaxVal = fMax;
 	
-	m_fnChangeCallback = callback;
+	if (callback)
+		m_callbacks.AddToTail(callback);
 
 	m_fValue = ( float )atof( m_pszString );
 	m_nValue = atoi( m_pszString ); // dont convert from float to int and lose bits
@@ -1005,6 +1044,12 @@ void ConVar::SetValue( int value )
 {
 	ConVar *var = ( ConVar * )m_pParent;
 	var->InternalSetIntValue( value );
+}
+
+void ConVar::SetValue(Vector const& value)
+{
+	ConVar *var = ( ConVar * )m_pParent;
+	var->InternalSetVectorValue( value );
 }
 
 //-----------------------------------------------------------------------------

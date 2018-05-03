@@ -350,13 +350,15 @@ public:
 	virtual	bool				IsCommand( void ) const;
 
 	// Install a change callback (there shouldn't already be one....)
-	void InstallChangeCallback( FnChangeCallback_t callback );
+	void InstallChangeCallback( FnChangeCallback_t callback, bool invoke );
+	void RemoveChangeCallback( FnChangeCallback_t callback );
 
 	// Retrieve value
-	FORCEINLINE_CVAR float			GetFloat( void ) const;
-	FORCEINLINE_CVAR int			GetInt( void ) const;
+	virtual float					GetFloat( void ) const;
+	virtual int						GetInt( void ) const;
 	FORCEINLINE_CVAR bool			GetBool() const {  return !!GetInt(); }
 	FORCEINLINE_CVAR char const	   *GetString( void ) const;
+	virtual Vector*					GetVector(void) const;
 
 	// Any function that allocates/frees memory needs to be virtual or else you'll have crashes
 	//  from alloc/free across dll/exe boundaries.
@@ -365,6 +367,7 @@ public:
 	virtual void				SetValue( const char *value );
 	virtual void				SetValue( float value );
 	virtual void				SetValue( int value );
+	virtual void				SetValue(Vector const& value);
 	
 	// Reset to default value
 	void						Revert( void );
@@ -375,15 +378,30 @@ public:
 	const char					*GetDefault( void ) const;
 	void						SetDefault( const char *pszDefault );
 
+	struct CVValue_t
+	{
+		char						*m_pszString;
+		int							m_StringLength;
+
+		// Values
+		float						m_fValue;
+		int							m_nValue;
+
+		// TODO: size = 28 bytes?
+	};
+
 private:
 	// Called by CCvar when the value of a var is changing.
 	virtual void				InternalSetValue(const char *value);
 	// For CVARs marked FCVAR_NEVER_AS_STRING
 	virtual void				InternalSetFloatValue( float fNewValue );
 	virtual void				InternalSetIntValue( int nValue );
+	virtual void				InternalSetVectorValue(Vector const& value);
+
+	bool InternalSetVectorFromString(char const* value);
 
 	virtual bool				ClampValue( float& value );
-	virtual void				ChangeStringValue( const char *tempVal, float flOldValue );
+	virtual void				ChangeStringValue(const char *tempVal, ConVar::CVValue_t const& oldValue);
 
 	virtual void				Create( const char *pName, const char *pDefaultValue, int flags = 0,
 									const char *pHelpString = 0, bool bMin = false, float fMin = 0.0,
@@ -418,7 +436,8 @@ private:
 	float						m_fMaxVal;
 	
 	// Call this function when ConVar changes
-	FnChangeCallback_t			m_fnChangeCallback;
+	// TODO: Validate whole ConVar structure
+	CUtlVector<FnChangeCallback_t> m_callbacks;
 };
 
 
@@ -451,6 +470,13 @@ FORCEINLINE_CVAR const char *ConVar::GetString( void ) const
 		return "FCVAR_NEVER_AS_STRING";
 
 	return ( m_pParent->m_pszString ) ? m_pParent->m_pszString : "";
+}
+
+
+FORCEINLINE_CVAR Vector *ConVar::GetVector( void ) const 
+{
+	// TODO
+	return NULL;
 }
 
 
