@@ -902,10 +902,6 @@ void ConVar::InternalSetFloatValue( float fNewValue )
 		Q_snprintf( tempVal, sizeof( tempVal), "%f", m_Value.m_fValue );
 		ChangeStringValue( tempVal, m_Value ); // TODO: Pass old value
 	}
-	else
-	{
-		Assert( !m_fnChangeCallback );
-	}
 }
 
 //-----------------------------------------------------------------------------
@@ -943,10 +939,6 @@ void ConVar::InternalSetIntValue( int nValue )
 		char tempVal[ 32 ];
 		Q_snprintf( tempVal, sizeof( tempVal ), "%d", m_Value.m_nValue );
 		ChangeStringValue( tempVal, m_Value ); // TODO: Pass old value
-	}
-	else
-	{
-		Assert( !m_fnChangeCallback );
 	}
 }
 
